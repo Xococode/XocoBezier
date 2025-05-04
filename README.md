@@ -3,7 +3,7 @@
 ![XOCOBEZIER](xocobezier.jpg)
 
 ## Acceso Rápido a la Aplicación
-[XOCOBEZIER](https://xococode.github.io/xocobezier/Bezier Variable Offsetting.html)
+[XOCOBEZIER](https://xococode.github.io/xocobezier/BezierVariableOffsetting.html)
 
 ## Descripción general
 Una aplicación interactiva para visualizar y ajustar offsets variables de curvas cuadráticas de Bézier. Permite al usuario modificar puntos clave y parámetros de forma dinámica, viendo al instante cómo cambia la geometría resultante.
