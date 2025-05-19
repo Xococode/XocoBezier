@@ -3,10 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quadratic Bezier Offsetting (Refined Modes)</title> <!-- Title Updated -->
+    <title>Quadratic Bezier Offsetting (Refined Modes)</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        :root { /* ... (CSS sin cambios) ... */ --primary: #4361ee; --primary-light: #4895ef; --secondary: #5057c9; --accent: #f72585; --light-bg: #1a1a1d; --dark-text: #e1e1e1; --light-text: #f8f9fa; --gray-bg: #333; --shadow: 0 4px 8px rgba(0, 0, 0, 0.4); --border-radius: 8px; --transition: all 0.3s ease; --cap-fill: rgba(180, 180, 180, 0.15); --control-geom: rgba(100, 181, 246, 0.5); --control-geom-pt: rgba(144, 202, 249, 0.7); --p1-color: #ff8a80; --pc-color: #80d8ff; --p2-color: #b9f6ca; --center-curve-color-val: '#9e9e9e'; --offset-curve-color-val: '#4895ef'; --perimeter-color-val: '#ff00ff'; }
+        :root {
+            --primary: #4361ee;
+            --primary-light: #4895ef;
+            --secondary: #5057c9;
+            --accent: #f72585;
+            --light-bg: #1a1a1d;
+            --dark-text: #e1e1e1;
+            --light-text: #f8f9fa;
+            --gray-bg: #333;
+            --shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+            --border-radius: 8px;
+            --transition: all 0.3s ease;
+            --cap-fill: rgba(180, 180, 180, 0.15);
+            --control-geom: rgba(100, 181, 246, 0.5);
+            --control-geom-pt: rgba(144, 202, 249, 0.7);
+            --p1-color: #ff8a80;
+            --pc-color: #80d8ff;
+            --p2-color: #b9f6ca;
+            --center-curve-color-val: '#9e9e9e';
+            --offset-curve-color-val: '#4895ef';
+            --perimeter-color-val: '#ff00ff';
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; height: 100%; margin: 0; overflow: hidden; background-color: var(--light-bg); color: var(--dark-text); }
         canvas { display: block; position: absolute; top: 0; left: 0; z-index: 0; cursor: default; }
@@ -53,102 +74,587 @@
 
     <script>
         // --- Vec2D Class ---
-        class Vec2D { /* ... (sin cambios) ... */ constructor(x=0,y=0){this.x=x;this.y=y}clone(){return new Vec2D(this.x,this.y)}add(v){return new Vec2D(this.x+v.x,this.y+v.y)}sub(v){return new Vec2D(this.x-v.x,this.y-v.y)}scale(s){return new Vec2D(this.x*s,this.y*s)}dot(v){return this.x*v.x+this.y*v.y}lengthSq(){return this.dot(this)}length(){return Math.sqrt(this.lengthSq())}normalize(){const len=this.length();return(len>1e-9)?this.scale(1/len):new Vec2D()}distanceTo(v){return this.sub(v).length()}interpolateTo(v,t){return this.add(v.sub(this).scale(t))}getPerpendicular(){return new Vec2D(-this.y,this.x)}angleBetween(v,signed=!1){const dot=this.normalize().dot(v.normalize()),angle=Math.acos(Math.max(-1,Math.min(1,dot)));if(signed)return this.x*v.y-this.y*v.x<0?-angle:angle;return angle} }
+        class Vec2D { 
+            constructor(x=0, y=0) {
+                this.x = x;
+                this.y = y;
+            }
+            
+            clone() {
+                return new Vec2D(this.x, this.y);
+            }
+            
+            add(v) {
+                return new Vec2D(this.x + v.x, this.y + v.y);
+            }
+            
+            sub(v) {
+                return new Vec2D(this.x - v.x, this.y - v.y);
+            }
+            
+            scale(s) {
+                return new Vec2D(this.x * s, this.y * s);
+            }
+            
+            dot(v) {
+                return this.x * v.x + this.y * v.y;
+            }
+            
+            lengthSq() {
+                return this.dot(this);
+            }
+            
+            length() {
+                return Math.sqrt(this.lengthSq());
+            }
+            
+            normalize() {
+                const len = this.length();
+                return (len > 1e-9) ? this.scale(1/len) : new Vec2D();
+            }
+            
+            distanceTo(v) {
+                return this.sub(v).length();
+            }
+            
+            interpolateTo(v, t) {
+                return this.add(v.sub(this).scale(t));
+            }
+            
+            getPerpendicular() {
+                return new Vec2D(-this.y, this.x);
+            }
+            
+            angleBetween(v, signed=false) {
+                const dot = this.normalize().dot(v.normalize());
+                const angle = Math.acos(Math.max(-1, Math.min(1, dot)));
+                if (signed) {
+                    return this.x * v.y - this.y * v.x < 0 ? -angle : angle;
+                }
+                return angle;
+            }
+        }
+        
         // --- Math Utilities ---
-        class MathUtils { /* ... (sin cambios) ... */ static getPointInQuadraticCurve(t,p1,pc,p2){const mt=1-t;return new Vec2D(mt*mt*p1.x+2*mt*t*pc.x+t*t*p2.x,mt*mt*p1.y+2*mt*t*pc.y+t*t*p2.y)}static getTangentQuadratic(t,p1,pc,p2){const mt=1-t;return new Vec2D(2*mt*(pc.x-p1.x)+2*t*(p2.x-pc.x),2*mt*(pc.y-p1.y)+2*t*(p2.y-pc.y))}static getNearestParamToPoint(p1,pc,p2,P,iterations=5,tolerance=1e-4){let t=.5;for(let i=0;i<iterations;i++){let Q=MathUtils.getPointInQuadraticCurve(t,p1,pc,p2),Q_prime=MathUtils.getTangentQuadratic(t,p1,pc,p2),Q_prime_prime=p2.sub(pc.scale(2)).add(p1).scale(2),PQ=Q.sub(P),numerator=PQ.dot(Q_prime),denominator=Q_prime.lengthSq()+PQ.dot(Q_prime_prime);if(Math.abs(denominator)<tolerance)break;let delta_t=numerator/denominator;t-=delta_t;t=Math.max(0,Math.min(1,t));if(Math.abs(delta_t)<tolerance)break}return t} }
+        class MathUtils { 
+            static getPointInQuadraticCurve(t, p1, pc, p2) {
+                const mt = 1-t;
+                return new Vec2D(
+                    mt*mt*p1.x + 2*mt*t*pc.x + t*t*p2.x,
+                    mt*mt*p1.y + 2*mt*t*pc.y + t*t*p2.y
+                );
+            }
+            
+            static getTangentQuadratic(t, p1, pc, p2) {
+                const mt = 1-t;
+                return new Vec2D(
+                    2*mt*(pc.x-p1.x) + 2*t*(p2.x-pc.x),
+                    2*mt*(pc.y-p1.y) + 2*t*(p2.y-pc.y)
+                );
+            }
+            
+            static getNearestParamToPoint(p1, pc, p2, P, iterations=5, tolerance=1e-4) {
+                let t = 0.5;
+                for (let i = 0; i < iterations; i++) {
+                    let Q = MathUtils.getPointInQuadraticCurve(t, p1, pc, p2);
+                    let Q_prime = MathUtils.getTangentQuadratic(t, p1, pc, p2);
+                    let Q_prime_prime = p2.sub(pc.scale(2)).add(p1).scale(2);
+                    let PQ = Q.sub(P);
+                    let numerator = PQ.dot(Q_prime);
+                    let denominator = Q_prime.lengthSq() + PQ.dot(Q_prime_prime);
+                    
+                    if (Math.abs(denominator) < tolerance) break;
+                    
+                    let delta_t = numerator / denominator;
+                    t -= delta_t;
+                    t = Math.max(0, Math.min(1, t));
+                    
+                    if (Math.abs(delta_t) < tolerance) break;
+                }
+                return t;
+            }
+        }
+        
         // --- Draggable Point Class ---
-        class Drag { /* ... (sin cambios) ... */ constructor(ctx,pos,radius=8){this.ctx=ctx;this.pos=pos;this.radius=radius;this.hitRadius=radius*2.5;this.hitRadiusSq=this.hitRadius*this.hitRadius;this.isDragging=!1;this.initialDragPointPos=null;this.initialMousePos=null;this.initialRatioX=0;this.initialRatioY=0}draw(index){const style=getComputedStyle(document.documentElement),colors=[style.getPropertyValue("--p1-color").trim()||"#ff8a80",style.getPropertyValue("--pc-color").trim()||"#80d8ff",style.getPropertyValue("--p2-color").trim()||"#b9f6ca"];this.ctx.fillStyle=colors[index]||"grey";this.ctx.strokeStyle="rgba(255,255,255,0.5)";this.ctx.lineWidth=1;this.ctx.beginPath();this.ctx.arc(this.pos.x,this.pos.y,this.radius,0,Math.PI*2);this.ctx.fill();this.ctx.stroke()}hitTest(point){return this.pos.sub(point).lengthSq()<this.hitRadiusSq}startDrag(point){if(this.hitTest(point)){this.isDragging=!0;this.initialDragPointPos=this.pos.clone();this.initialMousePos=point.clone();return!0}return!1}updateDrag(point){if(!this.isDragging||!this.initialDragPointPos||!this.initialMousePos)return;const mouseDelta=point.sub(this.initialMousePos);this.pos=this.initialDragPointPos.add(mouseDelta)}endDrag(){if(!this.isDragging)return;this.isDragging=!1;this.initialDragPointPos=null;this.initialMousePos=null;if(canvas.width>0&&canvas.height>0){this.initialRatioX=this.pos.x/canvas.width;this.initialRatioY=this.pos.y/canvas.height}}updatePositionFromRatio(canvasWidth,canvasHeight){this.pos.x=canvasWidth*this.initialRatioX;this.pos.y=canvasHeight*this.initialRatioY} }
+        class Drag { 
+            constructor(ctx, pos, radius=8) {
+                this.ctx = ctx;
+                this.pos = pos;
+                this.radius = radius;
+                this.hitRadius = radius * 2.5;
+                this.hitRadiusSq = this.hitRadius * this.hitRadius;
+                this.isDragging = false;
+                this.initialDragPointPos = null;
+                this.initialMousePos = null;
+                this.initialRatioX = 0;
+                this.initialRatioY = 0;
+            }
+            
+            draw(index) {
+                const style = getComputedStyle(document.documentElement);
+                const colors = [
+                    style.getPropertyValue("--p1-color").trim() || "#ff8a80",
+                    style.getPropertyValue("--pc-color").trim() || "#80d8ff",
+                    style.getPropertyValue("--p2-color").trim() || "#b9f6ca"
+                ];
+                
+                this.ctx.fillStyle = colors[index] || "grey";
+                this.ctx.strokeStyle = "rgba(255,255,255,0.5)";
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                this.ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI*2);
+                this.ctx.fill();
+                this.ctx.stroke();
+            }
+            
+            hitTest(point) {
+                return this.pos.sub(point).lengthSq() < this.hitRadiusSq;
+            }
+            
+            startDrag(point) {
+                if (this.hitTest(point)) {
+                    this.isDragging = true;
+                    this.initialDragPointPos = this.pos.clone();
+                    this.initialMousePos = point.clone();
+                    return true;
+                }
+                return false;
+            }
+            
+            updateDrag(point) {
+                if (!this.isDragging || !this.initialDragPointPos || !this.initialMousePos) return;
+                const mouseDelta = point.sub(this.initialMousePos);
+                this.pos = this.initialDragPointPos.add(mouseDelta);
+            }
+            
+            endDrag() {
+                if (!this.isDragging) return;
+                this.isDragging = false;
+                this.initialDragPointPos = null;
+                this.initialMousePos = null;
+                if (canvas.width > 0 && canvas.height > 0) {
+                    this.initialRatioX = this.pos.x / canvas.width;
+                    this.initialRatioY = this.pos.y / canvas.height;
+                }
+            }
+            
+            updatePositionFromRatio(canvasWidth, canvasHeight) {
+                this.pos.x = canvasWidth * this.initialRatioX;
+                this.pos.y = canvasHeight * this.initialRatioY;
+            }
+        }
 
         // --- Global Variables ---
-        var canvas, ctx; var drags = [];
-        var drawControlPoints = true; var isPerimeterMode = false; var useRoundedCaps = false; var isVolumeFillMode = false;
-        var p1Width = 97; var p2Width = 171; var curvatureValue = 50; var resolutionValue = 10;
-        var infoCollapsed = false; var currentDrag = null; var isInteracting = false;
-        var centerCurveColor = '#9e9e9e'; var offsetCurveColor = '#4895ef';
-        var controlGeomColor = 'rgba(100, 181, 246, 0.5)'; var controlGeomPtColor = 'rgba(144, 202, 249, 0.7)';
+        var canvas, ctx; 
+        var drags = [];
+        var drawControlPoints = true; 
+        var isPerimeterMode = false; 
+        var useRoundedCaps = false; 
+        var isVolumeFillMode = false;
+        var p1Width = 97; 
+        var p2Width = 171; 
+        var curvatureValue = 50; 
+        var resolutionValue = 10;
+        var infoCollapsed = false; 
+        var currentDrag = null; 
+        var isInteracting = false;
+        var centerCurveColor = '#9e9e9e'; 
+        var offsetCurveColor = '#4895ef';
+        var controlGeomColor = 'rgba(100, 181, 246, 0.5)'; 
+        var controlGeomPtColor = 'rgba(144, 202, 249, 0.7)';
         var perimeterColor = '#ff00ff';
         var initialDragState = { p1: null, pc: null, p2: null };
         var btnPerimeter, btnCaps, btnVolume; // Button elements cache
 
         // --- Initialization ---
         function init() {
-            canvas = document.getElementById('bezierCanvas'); ctx = canvas.getContext('2d'); drags = [];
+            canvas = document.getElementById('bezierCanvas'); 
+            ctx = canvas.getContext('2d'); 
+            drags = [];
             cacheCSSColors();
-            btnPerimeter = document.getElementById('btnSplit'); btnCaps = document.getElementById('btnCaps'); btnVolume = document.getElementById('btnVolume'); // Cache buttons
+            btnPerimeter = document.getElementById('btnSplit'); 
+            btnCaps = document.getElementById('btnCaps'); 
+            btnVolume = document.getElementById('btnVolume'); // Cache buttons
             window.addEventListener('resize', resize);
-            canvas.addEventListener('mousedown', handleInteractionStart); window.addEventListener('mouseup', handleInteractionEnd); window.addEventListener('mousemove', handleInteractionMove);
-            canvas.addEventListener('touchstart', handleInteractionStart, { passive: false }); window.addEventListener('touchend', handleInteractionEnd, { passive: false }); window.addEventListener('touchmove', handleInteractionMove, { passive: false });
-            document.getElementById('btnControl').addEventListener('click', function() { drawControlPoints = !drawControlPoints; this.classList.toggle('active', drawControlPoints); });
-            btnPerimeter.addEventListener('click', function() { isPerimeterMode = !isPerimeterMode; updateButtonStates(); });
-            btnCaps.addEventListener('click', function() { useRoundedCaps = !useRoundedCaps; if (useRoundedCaps && !isPerimeterMode) isPerimeterMode = true; updateButtonStates(); }); // Activate Perimeter if Caps is turned on
-            btnVolume.addEventListener('click', function() { isVolumeFillMode = !isVolumeFillMode; if (isVolumeFillMode && !isPerimeterMode) isPerimeterMode = true; updateButtonStates(); }); // Activate Perimeter if Volume is turned on
-            document.getElementById('collapseInfo').addEventListener('click', function() { const infoPanel = document.getElementById('infoPanel'); const icon = this.querySelector('i'); infoCollapsed = !infoCollapsed; infoPanel.classList.toggle('collapsed', infoCollapsed); icon.className = infoCollapsed ? 'fas fa-chevron-down' : 'fas fa-chevron-up'; });
-            setupSlider('p1-width-slider', 'p1-width-value', value => p1Width = Math.max(1, value), p1Width); setupSlider('p2-width-slider', 'p2-width-value', value => p2Width = Math.max(1, value), p2Width); setupSlider('curvature-slider', 'curvature-value', value => { curvatureValue = value; updateControlPointCurvature(true); }, curvatureValue); setupSlider('resolution-slider', 'resolution-value', value => resolutionValue = Math.max(2, value), resolutionValue);
+            canvas.addEventListener('mousedown', handleInteractionStart); 
+            window.addEventListener('mouseup', handleInteractionEnd); 
+            window.addEventListener('mousemove', handleInteractionMove);
+            canvas.addEventListener('touchstart', handleInteractionStart, { passive: false }); 
+            window.addEventListener('touchend', handleInteractionEnd, { passive: false }); 
+            window.addEventListener('touchmove', handleInteractionMove, { passive: false });
+            document.getElementById('btnControl').addEventListener('click', function() { 
+                drawControlPoints = !drawControlPoints; 
+                this.classList.toggle('active', drawControlPoints); 
+            });
+            btnPerimeter.addEventListener('click', function() { 
+                isPerimeterMode = !isPerimeterMode; 
+                updateButtonStates(); 
+            });
+            btnCaps.addEventListener('click', function() { 
+                useRoundedCaps = !useRoundedCaps; 
+                if (useRoundedCaps && !isPerimeterMode) 
+                    isPerimeterMode = true; 
+                updateButtonStates(); 
+            }); // Activate Perimeter if Caps is turned on
+            btnVolume.addEventListener('click', function() { 
+                isVolumeFillMode = !isVolumeFillMode; 
+                if (isVolumeFillMode && !isPerimeterMode) 
+                    isPerimeterMode = true; 
+                updateButtonStates(); 
+            }); // Activate Perimeter if Volume is turned on
+            document.getElementById('collapseInfo').addEventListener('click', function() { 
+                const infoPanel = document.getElementById('infoPanel'); 
+                const icon = this.querySelector('i'); 
+                infoCollapsed = !infoCollapsed; 
+                infoPanel.classList.toggle('collapsed', infoCollapsed); 
+                icon.className = infoCollapsed ? 'fas fa-chevron-down' : 'fas fa-chevron-up'; 
+            });
+            setupSlider('p1-width-slider', 'p1-width-value', value => p1Width = Math.max(1, value), p1Width); 
+            setupSlider('p2-width-slider', 'p2-width-value', value => p2Width = Math.max(1, value), p2Width); 
+            setupSlider('curvature-slider', 'curvature-value', value => { 
+                curvatureValue = value; 
+                updateControlPointCurvature(true); 
+            }, curvatureValue); 
+            setupSlider('resolution-slider', 'resolution-value', value => resolutionValue = Math.max(2, value), resolutionValue);
             resize();
-            if (drags.length === 0) { const w = canvas.width; const h = canvas.height; const o = Math.min(w, h) * 0.1; const ip = [ { x: w * 0.25, y: h * 0.5 + o }, { x: w * 0.5, y: h * 0.5 - o * 1.5 }, { x: w * 0.75, y: h * 0.5 + o } ]; drags.push(new Drag(ctx, new Vec2D(ip[0].x, ip[0].y), 8)); drags.push(new Drag(ctx, new Vec2D(ip[1].x, ip[1].y), 8)); drags.push(new Drag(ctx, new Vec2D(ip[2].x, ip[2].y), 8)); drags.forEach((d, i) => { if (i !== 1 && w>0 && h>0) { d.initialRatioX = d.pos.x / w; d.initialRatioY = d.pos.y / h; } }); updateControlPointCurvature(true); }
+            if (drags.length === 0) { 
+                const w = canvas.width; 
+                const h = canvas.height; 
+                const o = Math.min(w, h) * 0.1; 
+                const ip = [ 
+                    { x: w * 0.25, y: h * 0.5 + o }, 
+                    { x: w * 0.5, y: h * 0.5 - o * 1.5 }, 
+                    { x: w * 0.75, y: h * 0.5 + o } 
+                ]; 
+                drags.push(new Drag(ctx, new Vec2D(ip[0].x, ip[0].y), 8)); 
+                drags.push(new Drag(ctx, new Vec2D(ip[1].x, ip[1].y), 8)); 
+                drags.push(new Drag(ctx, new Vec2D(ip[2].x, ip[2].y), 8)); 
+                drags.forEach((d, i) => { 
+                    if (i !== 1 && w>0 && h>0) { 
+                        d.initialRatioX = d.pos.x / w; 
+                        d.initialRatioY = d.pos.y / h; 
+                    } 
+                }); 
+                updateControlPointCurvature(true); 
+            }
             updateButtonStates(); // Set initial button visual states
             document.getElementById('btnControl').classList.toggle('active', drawControlPoints);
             draw();
         }
-        function updateButtonStates() { if (!isPerimeterMode) { useRoundedCaps = false; isVolumeFillMode = false; } btnPerimeter.classList.toggle('active', isPerimeterMode); btnCaps.classList.toggle('active', useRoundedCaps && isPerimeterMode); btnVolume.classList.toggle('active', isVolumeFillMode && isPerimeterMode); }
-        function getCssVar(varName, fallback) { /* ... (sin cambios) ... */ if(typeof window==="undefined")return fallback;return getComputedStyle(document.documentElement).getPropertyValue(varName).trim()||fallback }
-        function cacheCSSColors() { /* ... (sin cambios) ... */ centerCurveColor=getCssVar("--center-curve-color-val","#9e9e9e").replace(/'/g,"");offsetCurveColor=getCssVar("--offset-curve-color-val","#4895ef").replace(/'/g,"");controlGeomColor=getCssVar("--control-geom","rgba(100, 181, 246, 0.5)");controlGeomPtColor=getCssVar("--control-geom-pt","rgba(144, 202, 249, 0.7)");perimeterColor=getCssVar("--perimeter-color-val","#ff00ff").replace(/'/g,"") }
-        function setupSlider(sliderId, valueSpanId, updateCallback, initialValue) { /* ... (sin cambios) ... */ const slider=document.getElementById(sliderId),valueSpan=document.getElementById(valueSpanId);if(!slider||!valueSpan){console.error("Slider setup failed:",sliderId,valueSpanId);return}slider.value=initialValue;valueSpan.textContent=initialValue;updateCallback(parseInt(initialValue));slider.addEventListener("input",function(){const val=parseInt(this.value);valueSpan.textContent=val;updateCallback(val)}) }
+        
+        function updateButtonStates() { 
+            if (!isPerimeterMode) { 
+                useRoundedCaps = false; 
+                isVolumeFillMode = false; 
+            } 
+            btnPerimeter.classList.toggle('active', isPerimeterMode); 
+            btnCaps.classList.toggle('active', useRoundedCaps && isPerimeterMode); 
+            btnVolume.classList.toggle('active', isVolumeFillMode && isPerimeterMode); 
+        }
+        
+        function getCssVar(varName, fallback) { 
+            if(typeof window === "undefined") return fallback;
+            return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || fallback;
+        }
+        
+        function cacheCSSColors() { 
+            centerCurveColor = getCssVar("--center-curve-color-val", "#9e9e9e").replace(/'/g, "");
+            offsetCurveColor = getCssVar("--offset-curve-color-val", "#4895ef").replace(/'/g, "");
+            controlGeomColor = getCssVar("--control-geom", "rgba(100, 181, 246, 0.5)");
+            controlGeomPtColor = getCssVar("--control-geom-pt", "rgba(144, 202, 249, 0.7)");
+            perimeterColor = getCssVar("--perimeter-color-val", "#ff00ff").replace(/'/g, "");
+        }
+        
+        function setupSlider(sliderId, valueSpanId, updateCallback, initialValue) {
+            const slider = document.getElementById(sliderId);
+            const valueSpan = document.getElementById(valueSpanId);
+            
+            if(!slider || !valueSpan) {
+                console.error("Slider setup failed:", sliderId, valueSpanId);
+                return;
+            }
+            
+            slider.value = initialValue;
+            valueSpan.textContent = initialValue;
+            updateCallback(parseInt(initialValue));
+            
+            slider.addEventListener("input", function() {
+                const val = parseInt(this.value);
+                valueSpan.textContent = val;
+                updateCallback(val);
+            });
+        }
 
         // --- Main Drawing Function ---
         function draw() {
             requestAnimationFrame(draw);
-            ctx.fillStyle = getCssVar('--light-bg', '#1a1a1d'); ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.lineWidth = 1;
+            ctx.fillStyle = getCssVar('--light-bg', '#1a1a1d'); 
+            ctx.fillRect(0, 0, canvas.width, canvas.height); 
+            ctx.lineWidth = 1;
+            
             if (drags.length < 3) return;
+            
             var p1 = drags[0].pos, pc = drags[1].pos, p2 = drags[2].pos;
-            var v1 = pc.sub(p1); var v2 = p2.sub(pc); if (v1.lengthSq() < 1e-9 || v2.lengthSq() < 1e-9 || p1.distanceTo(p2) < 1e-3) { drags.forEach((d, i) => d.draw(i)); return; }
-            var tan1 = v1.normalize(); var tan2 = v2.normalize(); var n1_dir = tan1.getPerpendicular(); var n2_dir = tan2.getPerpendicular(); var n1_start_scaled = n1_dir.scale(p1Width / 2); var n2_end_scaled = n2_dir.scale(p2Width / 2); var p1a = p1.add(n1_start_scaled); var p1b = p1.sub(n1_start_scaled); var p2a = p2.add(n2_end_scaled); var p2b = p2.sub(n2_end_scaled); var angle = v1.angleBetween(v2.scale(-1), false); var useInternalSplit = (angle < (Math.PI / 2 - 0.05)); var offsetCurveA_Segments = null, offsetCurveB_Segments = null, splitGeom = null;
-            function getOffsetCP(pc_orig, n_start_dir, n_end_dir, d_start, d_end) { let C = pc_orig, m = n_start_dir.add(n_end_dir), m_len_sq = m.lengthSq(); let d_avg = (d_start + d_end) / 2; if (d_avg < 1e-6) return C.clone(); if (m_len_sq < 1e-9) { return C.add(n_start_dir.scale(d_avg)); } else { let k_vec = m.scale(2 * d_avg / m_len_sq); return C.add(k_vec); } }
-            if (!useInternalSplit) { let ca = getOffsetCP(pc, n1_dir, n2_dir, p1Width / 2, p2Width / 2); let cb = getOffsetCP(pc, n1_dir.scale(-1), n2_dir.scale(-1), p1Width / 2, p2Width / 2); offsetCurveA_Segments = [{ p1: p1a, pc: ca, p2: p2a }]; offsetCurveB_Segments = [{ p1: p1b, pc: cb, p2: p2b }]; }
-            else { var t_split = MathUtils.getNearestParamToPoint(p1, pc, p2, pc); var pt_split = MathUtils.getPointInQuadraticCurve(t_split, p1, pc, p2); var pc1 = p1.interpolateTo(pc, t_split); var pc2 = pc.interpolateTo(p2, t_split); var tangent_split = MathUtils.getTangentQuadratic(t_split, p1, pc, p2).normalize(); var nt_dir = tangent_split.getPerpendicular(); var splitWidth = p1Width * (1 - t_split) + p2Width * t_split; var d_split = splitWidth / 2; var nt_scaled = nt_dir.scale(d_split); var qa = pt_split.add(nt_scaled); var qb = pt_split.sub(nt_scaled); let q1a = getOffsetCP(pc1, n1_dir, nt_dir, p1Width / 2, d_split); let q2a = getOffsetCP(pc2, nt_dir, n2_dir, d_split, p2Width / 2); let q1b = getOffsetCP(pc1, n1_dir.scale(-1), nt_dir.scale(-1), p1Width / 2, d_split); let q2b = getOffsetCP(pc2, nt_dir.scale(-1), n2_dir.scale(-1), d_split, p2Width / 2); offsetCurveA_Segments = [ { p1: p1a, pc: q1a, p2: qa }, { p1: qa, pc: q2a, p2: p2a } ]; offsetCurveB_Segments = [ { p1: p1b, pc: q1b, p2: qb }, { p1: qb, pc: q2b, p2: p2b } ]; splitGeom = { p1a, p1b, p2a, p2b, qa, qb, q1a, q2a, q1b, q2b, pt_split }; }
+            var v1 = pc.sub(p1); 
+            var v2 = p2.sub(pc); 
+            
+            if (v1.lengthSq() < 1e-9 || v2.lengthSq() < 1e-9 || p1.distanceTo(p2) < 1e-3) { 
+                drags.forEach((d, i) => d.draw(i)); 
+                return; 
+            }
+            
+            var tan1 = v1.normalize(); 
+            var tan2 = v2.normalize(); 
+            var n1_dir = tan1.getPerpendicular(); 
+            var n2_dir = tan2.getPerpendicular(); 
+            var n1_start_scaled = n1_dir.scale(p1Width / 2); 
+            var n2_end_scaled = n2_dir.scale(p2Width / 2); 
+            var p1a = p1.add(n1_start_scaled); 
+            var p1b = p1.sub(n1_start_scaled); 
+            var p2a = p2.add(n2_end_scaled); 
+            var p2b = p2.sub(n2_end_scaled); 
+            var angle = v1.angleBetween(v2.scale(-1), false); 
+            var useInternalSplit = (angle < (Math.PI / 2 - 0.05)); 
+            var offsetCurveA_Segments = null, offsetCurveB_Segments = null, splitGeom = null;
+            
+            function getOffsetCP(pc_orig, n_start_dir, n_end_dir, d_start, d_end) { 
+                let C = pc_orig, m = n_start_dir.add(n_end_dir), m_len_sq = m.lengthSq(); 
+                let d_avg = (d_start + d_end) / 2; 
+                
+                if (d_avg < 1e-6) return C.clone(); 
+                
+                if (m_len_sq < 1e-9) { 
+                    return C.add(n_start_dir.scale(d_avg)); 
+                } else { 
+                    let k_vec = m.scale(2 * d_avg / m_len_sq); 
+                    return C.add(k_vec); 
+                } 
+            }
+            
+            if (!useInternalSplit) { 
+                let ca = getOffsetCP(pc, n1_dir, n2_dir, p1Width / 2, p2Width / 2); 
+                let cb = getOffsetCP(pc, n1_dir.scale(-1), n2_dir.scale(-1), p1Width / 2, p2Width / 2); 
+                offsetCurveA_Segments = [{ p1: p1a, pc: ca, p2: p2a }]; 
+                offsetCurveB_Segments = [{ p1: p1b, pc: cb, p2: p2b }]; 
+            }
+            else { 
+                var t_split = MathUtils.getNearestParamToPoint(p1, pc, p2, pc); 
+                var pt_split = MathUtils.getPointInQuadraticCurve(t_split, p1, pc, p2); 
+                var pc1 = p1.interpolateTo(pc, t_split); 
+                var pc2 = pc.interpolateTo(p2, t_split); 
+                var tangent_split = MathUtils.getTangentQuadratic(t_split, p1, pc, p2).normalize(); 
+                var nt_dir = tangent_split.getPerpendicular(); 
+                var splitWidth = p1Width * (1 - t_split) + p2Width * t_split; 
+                var d_split = splitWidth / 2; 
+                var nt_scaled = nt_dir.scale(d_split); 
+                var qa = pt_split.add(nt_scaled); 
+                var qb = pt_split.sub(nt_scaled); 
+                
+                let q1a = getOffsetCP(pc1, n1_dir, nt_dir, p1Width / 2, d_split); 
+                let q2a = getOffsetCP(pc2, nt_dir, n2_dir, d_split, p2Width / 2); 
+                let q1b = getOffsetCP(pc1, n1_dir.scale(-1), nt_dir.scale(-1), p1Width / 2, d_split); 
+                let q2b = getOffsetCP(pc2, nt_dir.scale(-1), n2_dir.scale(-1), d_split, p2Width / 2); 
+                
+                offsetCurveA_Segments = [ 
+                    { p1: p1a, pc: q1a, p2: qa }, 
+                    { p1: qa, pc: q2a, p2: p2a } 
+                ]; 
+                
+                offsetCurveB_Segments = [ 
+                    { p1: p1b, pc: q1b, p2: qb }, 
+                    { p1: qb, pc: q2b, p2: p2b } 
+                ]; 
+                
+                splitGeom = { p1a, p1b, p2a, p2b, qa, qb, q1a, q2a, q1b, q2b, pt_split }; 
+            }
 
             // --- Function to define the complete perimeter path ---
-             const definePerimeterPath = () => {
-                 ctx.beginPath(); // Start the path definition
-                 if (!offsetCurveA_Segments || !offsetCurveB_Segments) return false;
-                 const firstA = offsetCurveA_Segments[0], lastA = offsetCurveA_Segments[offsetCurveA_Segments.length - 1];
-                 const firstB = offsetCurveB_Segments[0], lastB = offsetCurveB_Segments[offsetCurveB_Segments.length - 1];
-                 if (!firstA || !firstA.p1 || !lastA || !lastA.p2 || !firstB || !firstB.p1 || !lastB || !lastB.p2) { console.error("Invalid segment data for perimeter path."); return false; }
-                 const startA = firstA.p1, endA = lastA.p2, startB = firstB.p1, endB = lastB.p2;
-                 ctx.moveTo(startA.x, startA.y);
-                 offsetCurveA_Segments.forEach(seg => { if (seg && seg.p1 && seg.pc && seg.p2) { drawQuadraticBezierWithResolution(ctx, seg.p1, seg.pc, seg.p2, resolutionValue); } });
-                 // End Cap P2 (Respects useRoundedCaps, uses arc)
-                 if (useRoundedCaps && p2Width > 1) { const r = p2Width / 2, aA = Math.atan2(endA.y - p2.y, endA.x - p2.x), aB = Math.atan2(endB.y - p2.y, endB.x - p2.x); let d = aB - aA; while (d <= -Math.PI) d += 2 * Math.PI; while (d > Math.PI) d -= 2 * Math.PI; ctx.arc(p2.x, p2.y, r, aA, aB, d > 0); } else { ctx.lineTo(endB.x, endB.y); }
-                 // Curve B backwards
-                 const segmentsBRes = Math.max(2, Math.floor(resolutionValue)); for (let j = offsetCurveB_Segments.length - 1; j >= 0; j--) { const segB = offsetCurveB_Segments[j]; if (segB && segB.p1 && segB.pc && segB.p2) { for (let i = segmentsBRes - 1; i >= 0; i--) { const t = i / segmentsBRes; const pt = MathUtils.getPointInQuadraticCurve(t, segB.p1, segB.pc, segB.p2); ctx.lineTo(pt.x, pt.y); } } }
-                 // Start Cap P1 (Respects useRoundedCaps, uses arc)
-                 if (useRoundedCaps && p1Width > 1) { const r = p1Width / 2, cP = firstB.p1, tP = firstA.p1, aB = Math.atan2(cP.y - p1.y, cP.x - p1.x), aA = Math.atan2(tP.y - p1.y, tP.x - p1.x); let d = aA - aB; while (d <= -Math.PI) d += 2 * Math.PI; while (d > Math.PI) d -= 2 * Math.PI; ctx.arc(p1.x, p1.y, r, aB, aA, d > 0); } else { ctx.closePath(); }
-                 return true; // Path definition succeeded
-             };
+            const definePerimeterPath = () => {
+                ctx.beginPath(); // Start the path definition
+                if (!offsetCurveA_Segments || !offsetCurveB_Segments) return false;
+                
+                const firstA = offsetCurveA_Segments[0], lastA = offsetCurveA_Segments[offsetCurveA_Segments.length - 1];
+                const firstB = offsetCurveB_Segments[0], lastB = offsetCurveB_Segments[offsetCurveB_Segments.length - 1];
+                
+                if (!firstA || !firstA.p1 || !lastA || !lastA.p2 || !firstB || !firstB.p1 || !lastB || !lastB.p2) { 
+                    console.error("Invalid segment data for perimeter path."); 
+                    return false; 
+                }
+                
+                const startA = firstA.p1, endA = lastA.p2, startB = firstB.p1, endB = lastB.p2;
+                
+                ctx.moveTo(startA.x, startA.y);
+                
+                // Draw curve A (upper curve)
+                offsetCurveA_Segments.forEach(seg => { 
+                    if (seg && seg.p1 && seg.pc && seg.p2) { 
+                        drawQuadraticBezierWithResolution(ctx, seg.p1, seg.pc, seg.p2, resolutionValue); 
+                    } 
+                });
+                
+                // End Cap P2 (Respects useRoundedCaps, uses arc)
+                if (useRoundedCaps && p2Width > 1) { 
+                    const r = p2Width / 2, 
+                          aA = Math.atan2(endA.y - p2.y, endA.x - p2.x), 
+                          aB = Math.atan2(endB.y - p2.y, endB.x - p2.x); 
+                    let d = aB - aA; 
+                    while (d <= -Math.PI) d += 2 * Math.PI; 
+                    while (d > Math.PI) d -= 2 * Math.PI; 
+                    ctx.arc(p2.x, p2.y, r, aA, aB, d > 0); 
+                } else { 
+                    ctx.lineTo(endB.x, endB.y); 
+                }
+                
+                // Curve B backwards (lower curve, drawn in reverse)
+                const segmentsBRes = Math.max(2, Math.floor(resolutionValue)); 
+                for (let j = offsetCurveB_Segments.length - 1; j >= 0; j--) { 
+                    const segB = offsetCurveB_Segments[j]; 
+                    if (segB && segB.p1 && segB.pc && segB.p2) { 
+                        for (let i = segmentsBRes - 1; i >= 0; i--) { 
+                            const t = i / segmentsBRes; 
+                            const pt = MathUtils.getPointInQuadraticCurve(t, segB.p1, segB.pc, segB.p2); 
+                            ctx.lineTo(pt.x, pt.y); 
+                        } 
+                    } 
+                }
+                
+                // Start Cap P1 (Respects useRoundedCaps, uses arc)
+                if (useRoundedCaps && p1Width > 1) { 
+                    const r = p1Width / 2, 
+                          cP = firstB.p1, 
+                          tP = firstA.p1, 
+                          aB = Math.atan2(cP.y - p1.y, cP.x - p1.x), 
+                          aA = Math.atan2(tP.y - p1.y, tP.x - p1.x); 
+                    let d = aA - aB; 
+                    while (d <= -Math.PI) d += 2 * Math.PI; 
+                    while (d > Math.PI) d -= 2 * Math.PI; 
+                    ctx.arc(p1.x, p1.y, r, aB, aA, d > 0); 
+                } else { 
+                    ctx.closePath(); 
+                }
+                
+                return true; // Path definition succeeded
+            };
 
             // --- Conditional Drawing ---
             if (isPerimeterMode) {
                 // --- Draw Perimeter/Caps/Volume Mode ---
                 // Stroke the path first
                 if (definePerimeterPath()) {
-                    ctx.strokeStyle = perimeterColor; ctx.lineWidth = 2; ctx.stroke();
+                    ctx.strokeStyle = perimeterColor; 
+                    ctx.lineWidth = 2; 
+                    ctx.stroke();
                 }
+                
                 // Then fill if needed
                 if (isVolumeFillMode) {
-                     if (definePerimeterPath()) { // Define the path AGAIN for fill
-                         ctx.fillStyle = perimeterColor;
-                         ctx.fill("evenodd"); // Fill the clean path
-                     }
+                    if (definePerimeterPath()) { // Define the path AGAIN for fill
+                        ctx.fillStyle = perimeterColor;
+                        ctx.fill("evenodd"); // Fill the clean path
+                    }
                 }
-
             } else {
                 // --- Draw Normal Mode ---
-                 const capFillColor = getCssVar('--cap-fill', 'rgba(180, 180, 180, 0.15)'); // Caps are always gray in normal mode
-                 ctx.save(); ctx.fillStyle = capFillColor; ctx.beginPath(); ctx.arc(p1.x, p1.y, Math.max(1, p1Width / 2), 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(p2.x, p2.y, Math.max(1, p2Width / 2), 0, Math.PI * 2); ctx.fill(); ctx.restore();
-                 if (drawControlPoints) { ctx.save(); ctx.lineWidth = 1; ctx.strokeStyle = controlGeomColor; ctx.fillStyle = controlGeomPtColor; ctx.setLineDash([3, 3]); ctx.beginPath(); if (!useInternalSplit && offsetCurveA_Segments && offsetCurveB_Segments) { const segA = offsetCurveA_Segments[0]; const segB = offsetCurveB_Segments[0]; if(segA.pc) drawSmallRect(ctx, segA.pc); if(segB.pc) drawSmallRect(ctx, segB.pc); if(segA.pc) { ctx.moveTo(segA.p1.x, segA.p1.y); ctx.lineTo(segA.pc.x, segA.pc.y); ctx.lineTo(segA.p2.x, segA.p2.y); } if(segB.pc) { ctx.moveTo(segB.p1.x, segB.p1.y); ctx.lineTo(segB.pc.x, segB.pc.y); ctx.lineTo(segB.p2.x, segB.p2.y); } } else if (useInternalSplit && splitGeom) { drawSmallRect(ctx, splitGeom.q1a); drawSmallRect(ctx, splitGeom.q2a); drawSmallRect(ctx, splitGeom.q1b); drawSmallRect(ctx, splitGeom.q2b); drawSmallRect(ctx, splitGeom.qa, 5); drawSmallRect(ctx, splitGeom.qb, 5); ctx.moveTo(splitGeom.p1a.x, splitGeom.p1a.y); ctx.lineTo(splitGeom.q1a.x, splitGeom.q1a.y); ctx.lineTo(splitGeom.qa.x, splitGeom.qa.y); ctx.moveTo(splitGeom.qa.x, splitGeom.qa.y); ctx.lineTo(splitGeom.q2a.x, splitGeom.q2a.y); ctx.lineTo(splitGeom.p2a.x, splitGeom.p2a.y); ctx.moveTo(splitGeom.p1b.x, splitGeom.p1b.y); ctx.lineTo(splitGeom.q1b.x, splitGeom.q1b.y); ctx.lineTo(splitGeom.qb.x, splitGeom.qb.y); ctx.moveTo(splitGeom.qb.x, splitGeom.qb.y); ctx.lineTo(splitGeom.q2b.x, splitGeom.q2b.y); ctx.lineTo(splitGeom.p2b.x, splitGeom.p2b.y); ctx.moveTo(splitGeom.qa.x, splitGeom.qa.y); ctx.lineTo(splitGeom.qb.x, splitGeom.qb.y); } ctx.stroke(); ctx.restore(); }
-                 ctx.beginPath(); ctx.moveTo(p1.x, p1.y); drawQuadraticBezierWithResolution(ctx, p1, pc, p2, resolutionValue); ctx.strokeStyle = centerCurveColor; ctx.lineWidth = 1.5; ctx.stroke();
-                 ctx.strokeStyle = offsetCurveColor; ctx.lineWidth = 2; function drawCurveSegments(segments) { if (!segments || segments.length === 0) return; ctx.beginPath(); ctx.moveTo(segments[0].p1.x, segments[0].p1.y); segments.forEach(seg => { if (seg && seg.p1 && seg.pc && seg.p2) { drawQuadraticBezierWithResolution(ctx, seg.p1, seg.pc, seg.p2, resolutionValue); } else { console.warn("Skipping invalid segment:", seg); } }); ctx.stroke(); }
-                 drawCurveSegments(offsetCurveA_Segments); drawCurveSegments(offsetCurveB_Segments);
+                const capFillColor = getCssVar('--cap-fill', 'rgba(180, 180, 180, 0.15)'); // Caps are always gray in normal mode
+                ctx.save(); 
+                ctx.fillStyle = capFillColor; 
+                ctx.beginPath(); 
+                ctx.arc(p1.x, p1.y, Math.max(1, p1Width / 2), 0, Math.PI * 2); 
+                ctx.fill(); 
+                ctx.beginPath(); 
+                ctx.arc(p2.x, p2.y, Math.max(1, p2Width / 2), 0, Math.PI * 2); 
+                ctx.fill(); 
+                ctx.restore();
+                
+                if (drawControlPoints) { 
+                    ctx.save(); 
+                    ctx.lineWidth = 1; 
+                    ctx.strokeStyle = controlGeomColor; 
+                    ctx.fillStyle = controlGeomPtColor; 
+                    ctx.setLineDash([3, 3]); 
+                    ctx.beginPath(); 
+                    
+                    if (!useInternalSplit && offsetCurveA_Segments && offsetCurveB_Segments) { 
+                        const segA = offsetCurveA_Segments[0]; 
+                        const segB = offsetCurveB_Segments[0]; 
+                        
+                        if(segA.pc) drawSmallRect(ctx, segA.pc); 
+                        if(segB.pc) drawSmallRect(ctx, segB.pc); 
+                        
+                        if(segA.pc) { 
+                            ctx.moveTo(segA.p1.x, segA.p1.y); 
+                            ctx.lineTo(segA.pc.x, segA.pc.y); 
+                            ctx.lineTo(segA.p2.x, segA.p2.y); 
+                        } 
+                        
+                        if(segB.pc) { 
+                            ctx.moveTo(segB.p1.x, segB.p1.y); 
+                            ctx.lineTo(segB.pc.x, segB.pc.y); 
+                            ctx.lineTo(segB.p2.x, segB.p2.y); 
+                        } 
+                    } else if (useInternalSplit && splitGeom) { 
+                        drawSmallRect(ctx, splitGeom.q1a); 
+                        drawSmallRect(ctx, splitGeom.q2a); 
+                        drawSmallRect(ctx, splitGeom.q1b); 
+                        drawSmallRect(ctx, splitGeom.q2b); 
+                        drawSmallRect(ctx, splitGeom.qa, 5); 
+                        drawSmallRect(ctx, splitGeom.qb, 5); 
+                        
+                        ctx.moveTo(splitGeom.p1a.x, splitGeom.p1a.y); 
+                        ctx.lineTo(splitGeom.q1a.x, splitGeom.q1a.y); 
+                        ctx.lineTo(splitGeom.qa.x, splitGeom.qa.y); 
+                        
+                        ctx.moveTo(splitGeom.qa.x, splitGeom.qa.y); 
+                        ctx.lineTo(splitGeom.q2a.x, splitGeom.q2a.y); 
+                        ctx.lineTo(splitGeom.p2a.x, splitGeom.p2a.y); 
+                        
+                        ctx.moveTo(splitGeom.p1b.x, splitGeom.p1b.y); 
+                        ctx.lineTo(splitGeom.q1b.x, splitGeom.q1b.y); 
+                        ctx.lineTo(splitGeom.qb.x, splitGeom.qb.y); 
+                        
+                        ctx.moveTo(splitGeom.qb.x, splitGeom.qb.y); 
+                        ctx.lineTo(splitGeom.q2b.x, splitGeom.q2b.y); 
+                        ctx.lineTo(splitGeom.p2b.x, splitGeom.p2b.y); 
+                        
+                        ctx.moveTo(splitGeom.qa.x, splitGeom.qa.y); 
+                        ctx.lineTo(splitGeom.qb.x, splitGeom.qb.y); 
+                    } 
+                    
+                    ctx.stroke(); 
+                    ctx.restore(); 
+                }
+                
+                // Draw center curve
+                ctx.beginPath(); 
+                ctx.moveTo(p1.x, p1.y); 
+                drawQuadraticBezierWithResolution(ctx, p1, pc, p2, resolutionValue); 
+                ctx.strokeStyle = centerCurveColor; 
+                ctx.lineWidth = 1.5; 
+                ctx.stroke();
+                
+                // Draw offset curves
+                ctx.strokeStyle = offsetCurveColor; 
+                ctx.lineWidth = 2; 
+                
+                function drawCurveSegments(segments) { 
+                    if (!segments || segments.length === 0) return; 
+                    
+                    ctx.beginPath(); 
+                    ctx.moveTo(segments[0].p1.x, segments[0].p1.y); 
+                    
+                    segments.forEach(seg => { 
+                        if (seg && seg.p1 && seg.pc && seg.p2) { 
+                            drawQuadraticBezierWithResolution(ctx, seg.p1, seg.pc, seg.p2, resolutionValue); 
+                        } else { 
+                            console.warn("Skipping invalid segment:", seg); 
+                        } 
+                    }); 
+                    
+                    ctx.stroke(); 
+                }
+                
+                drawCurveSegments(offsetCurveA_Segments); 
+                drawCurveSegments(offsetCurveB_Segments);
             }
 
             // --- Draw Draggable Points (Always drawn last) ---
@@ -157,16 +663,216 @@
         }
 
         // --- Helper Functions ---
-        function drawQuadraticBezierWithResolution(ctx, p1, pc, p2, resolution) { /* ... (sin cambios) ... */ const segments=Math.max(2,Math.floor(resolution));for(let i=1;i<=segments;i++){const t=i/segments,pt=MathUtils.getPointInQuadraticCurve(t,p1,pc,p2);ctx.lineTo(pt.x,pt.y)} }
-        function drawSmallRect(ctx, pos, size = 4) { /* ... (sin cambios) ... */ if(!pos||typeof pos.x!=="number"||!Number.isFinite(pos.x)||typeof pos.y!=="number"||!Number.isFinite(pos.y))return;const r=size/2;ctx.fillRect(pos.x-r,pos.y-r,size,size) }
-        function resize() { /* ... (sin cambios) ... */ const oldWidth=canvas.width,oldHeight=canvas.height;canvas.width=window.innerWidth;canvas.height=window.innerHeight;if(drags.length===3&&oldWidth>0&&oldHeight>0){drags[0].updatePositionFromRatio(canvas.width,canvas.height);drags[2].updatePositionFromRatio(canvas.width,canvas.height);updateControlPointCurvature(!1);if(canvas.width>0&&canvas.height>0){drags[1].initialRatioX=drags[1].pos.x/canvas.width;drags[1].initialRatioY=drags[1].pos.y/canvas.height}}cacheCSSColors() }
-        function updateControlPointCurvature(updateRatio = true) { /* ... (sin cambios) ... */ if(drags.length!==3)return;var p1=drags[0].pos,p2=drags[2].pos,mid=p1.interpolateTo(p2,.5),vec=p2.sub(p1),len=vec.length();if(len>1e-6){var perp=vec.getPerpendicular().normalize(),curveStrength=(curvatureValue-50)*len*.008;drags[1].pos=mid.add(perp.scale(curveStrength))}else drags[1].pos=p1.clone();if(updateRatio&&canvas.width>0&&canvas.height>0){drags[1].initialRatioX=drags[1].pos.x/canvas.width;drags[1].initialRatioY=drags[1].pos.y/canvas.height} }
-        function updateCurvatureSliderFromPC() { /* ... (sin cambios) ... */ if(drags.length!==3)return;const p1=drags[0].pos,pc=drags[1].pos,p2=drags[2].pos,vec=p2.sub(p1),len=vec.length();if(len<1e-6)return;const mid=p1.interpolateTo(p2,.5),perp=vec.getPerpendicular().normalize(),vecMidToPc=pc.sub(mid),curveStrength=vecMidToPc.dot(perp),sensitivity=.008;let newCurvatureValue=curveStrength/len/sensitivity+50;newCurvatureValue=Math.max(1,Math.min(100,newCurvatureValue));curvatureValue=Math.round(newCurvatureValue);const slider=document.getElementById("curvature-slider"),valueSpan=document.getElementById("curvature-value");if(slider&&valueSpan){slider.value=curvatureValue;valueSpan.textContent=curvatureValue} }
+        function drawQuadraticBezierWithResolution(ctx, p1, pc, p2, resolution) { 
+            const segments = Math.max(2, Math.floor(resolution));
+            for (let i = 1; i <= segments; i++) {
+                const t = i / segments;
+                const pt = MathUtils.getPointInQuadraticCurve(t, p1, pc, p2);
+                ctx.lineTo(pt.x, pt.y);
+            } 
+        }
+        
+        function drawSmallRect(ctx, pos, size = 4) { 
+            if (!pos || typeof pos.x !== "number" || !Number.isFinite(pos.x) || 
+                typeof pos.y !== "number" || !Number.isFinite(pos.y)) return;
+            
+            const r = size / 2;
+            ctx.fillRect(pos.x - r, pos.y - r, size, size);
+        }
+        
+        function resize() { 
+            const oldWidth = canvas.width, oldHeight = canvas.height;
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            if (drags.length === 3 && oldWidth > 0 && oldHeight > 0) {
+                drags[0].updatePositionFromRatio(canvas.width, canvas.height);
+                drags[2].updatePositionFromRatio(canvas.width, canvas.height);
+                updateControlPointCurvature(false);
+                
+                if (canvas.width > 0 && canvas.height > 0) {
+                    drags[1].initialRatioX = drags[1].pos.x / canvas.width;
+                    drags[1].initialRatioY = drags[1].pos.y / canvas.height;
+                }
+            }
+            
+            cacheCSSColors();
+        }
+        
+        function updateControlPointCurvature(updateRatio = true) { 
+            if (drags.length !== 3) return;
+            
+            var p1 = drags[0].pos, p2 = drags[2].pos;
+            var mid = p1.interpolateTo(p2, 0.5);
+            var vec = p2.sub(p1);
+            var len = vec.length();
+            
+            if (len > 1e-6) {
+                var perp = vec.getPerpendicular().normalize();
+                var curveStrength = (curvatureValue - 50) * len * 0.008;
+                drags[1].pos = mid.add(perp.scale(curveStrength));
+            } else {
+                drags[1].pos = p1.clone();
+            }
+            
+            if (updateRatio && canvas.width > 0 && canvas.height > 0) {
+                drags[1].initialRatioX = drags[1].pos.x / canvas.width;
+                drags[1].initialRatioY = drags[1].pos.y / canvas.height;
+            } 
+        }
+        
+        function updateCurvatureSliderFromPC() { 
+            if (drags.length !== 3) return;
+            
+            const p1 = drags[0].pos,
+                  pc = drags[1].pos,
+                  p2 = drags[2].pos,
+                  vec = p2.sub(p1),
+                  len = vec.length();
+                  
+            if (len < 1e-6) return;
+            
+            const mid = p1.interpolateTo(p2, 0.5),
+                  perp = vec.getPerpendicular().normalize(),
+                  vecMidToPc = pc.sub(mid),
+                  curveStrength = vecMidToPc.dot(perp),
+                  sensitivity = 0.008;
+                  
+            let newCurvatureValue = curveStrength / len / sensitivity + 50;
+            newCurvatureValue = Math.max(1, Math.min(100, newCurvatureValue));
+            curvatureValue = Math.round(newCurvatureValue);
+            
+            const slider = document.getElementById("curvature-slider"),
+                  valueSpan = document.getElementById("curvature-value");
+                  
+            if (slider && valueSpan) {
+                slider.value = curvatureValue;
+                valueSpan.textContent = curvatureValue;
+            }
+        }
+        
         // --- Interaction Handlers ---
-        function getEventPosition(event) { /* ... (sin cambios) ... */ const rect = canvas.getBoundingClientRect(); let clientX, clientY; if (event.touches && event.touches.length > 0) { clientX = event.touches[0].clientX; clientY = event.touches[0].clientY; } else if (event.changedTouches && event.changedTouches.length > 0) { clientX = event.changedTouches[0].clientX; clientY = event.changedTouches[0].clientY; } else { clientX = event.clientX; clientY = event.clientY; } return new Vec2D(clientX - rect.left, clientY - rect.top); }
-        function handleInteractionStart(event) { /* ... (sin cambios) ... */ if(event.type==="touchstart")event.preventDefault();isInteracting=!0;const pos=getEventPosition(event);currentDrag=null;initialDragState={p1:null,pc:null,p2:null};for(let i=drags.length-1;i>=0;i--){if(drags[i].startDrag(pos)){currentDrag=drags[i];canvas.style.cursor="grabbing";if(currentDrag===drags[0]||currentDrag===drags[2]){initialDragState.p1=drags[0].pos.clone();initialDragState.pc=drags[1].pos.clone();initialDragState.p2=drags[2].pos.clone()}break}} }
-        function handleInteractionMove(event) { /* ... (sin cambios) ... */ const pos=getEventPosition(event);let hovering=!1;for(let i=drags.length-1;i>=0;i--){if(drags[i].hitTest(pos)){hovering=!0;break}}if(!isInteracting){canvas.style.cursor=hovering?"grab":"default";return}if(event.type==="touchmove")event.preventDefault();if(currentDrag){const initialPosBeforeUpdate=currentDrag.initialDragPointPos?currentDrag.initialDragPointPos.clone():currentDrag.pos.clone();currentDrag.updateDrag(pos);if((currentDrag===drags[0]||currentDrag===drags[2])&&initialDragState.pc){const deltaMove=currentDrag.pos.sub(initialPosBeforeUpdate);drags[1].pos=initialDragState.pc.add(deltaMove)}else if(currentDrag===drags[1]){updateCurvatureSliderFromPC();if(canvas.width>0&&canvas.height>0){drags[1].initialRatioX=drags[1].pos.x/canvas.width;drags[1].initialRatioY=drags[1].pos.y/canvas.height}}canvas.style.cursor="grabbing"}else canvas.style.cursor="default"; }
-        function handleInteractionEnd(event) { /* ... (sin cambios) ... */ if(!isInteracting&&!currentDrag)return;if(event.type==="touchend")event.preventDefault();const wasDragging=!!currentDrag;isInteracting=!1;if(currentDrag){currentDrag.endDrag();if(currentDrag===drags[0]||currentDrag===drags[2]){if(canvas.width>0&&canvas.height>0){drags[1].initialRatioX=drags[1].pos.x/canvas.width;drags[1].initialRatioY=drags[1].pos.y/canvas.height}}else if(currentDrag===drags[1]){updateCurvatureSliderFromPC()}currentDrag=null}initialDragState={p1:null,pc:null,p2:null};const pos=getEventPosition(event);let hovering=!1;for(let i=drags.length-1;i>=0;i--){if(drags[i].hitTest(pos)){hovering=!0;break}}canvas.style.cursor=hovering?"grab":"default"; }
+        function getEventPosition(event) { 
+            const rect = canvas.getBoundingClientRect(); 
+            let clientX, clientY; 
+            
+            if (event.touches && event.touches.length > 0) { 
+                clientX = event.touches[0].clientX; 
+                clientY = event.touches[0].clientY; 
+            } else if (event.changedTouches && event.changedTouches.length > 0) { 
+                clientX = event.changedTouches[0].clientX; 
+                clientY = event.changedTouches[0].clientY; 
+            } else { 
+                clientX = event.clientX; 
+                clientY = event.clientY; 
+            } 
+            
+            return new Vec2D(clientX - rect.left, clientY - rect.top); 
+        }
+        
+        function handleInteractionStart(event) { 
+            if (event.type === "touchstart") event.preventDefault();
+            
+            isInteracting = true;
+            const pos = getEventPosition(event);
+            currentDrag = null;
+            initialDragState = {p1: null, pc: null, p2: null};
+            
+            for (let i = drags.length - 1; i >= 0; i--) {
+                if (drags[i].startDrag(pos)) {
+                    currentDrag = drags[i];
+                    canvas.style.cursor = "grabbing";
+                    
+                    if (currentDrag === drags[0] || currentDrag === drags[2]) {
+                        initialDragState.p1 = drags[0].pos.clone();
+                        initialDragState.pc = drags[1].pos.clone();
+                        initialDragState.p2 = drags[2].pos.clone();
+                    }
+                    break;
+                }
+            }
+        }
+        
+        function handleInteractionMove(event) { 
+            const pos = getEventPosition(event);
+            let hovering = false;
+            
+            for (let i = drags.length - 1; i >= 0; i--) {
+                if (drags[i].hitTest(pos)) {
+                    hovering = true;
+                    break;
+                }
+            }
+            
+            if (!isInteracting) {
+                canvas.style.cursor = hovering ? "grab" : "default";
+                return;
+            }
+            
+            if (event.type === "touchmove") event.preventDefault();
+            
+            if (currentDrag) {
+                const initialPosBeforeUpdate = currentDrag.initialDragPointPos ? 
+                                               currentDrag.initialDragPointPos.clone() : 
+                                               currentDrag.pos.clone();
+                                               
+                currentDrag.updateDrag(pos);
+                
+                if ((currentDrag === drags[0] || currentDrag === drags[2]) && initialDragState.pc) {
+                    const deltaMove = currentDrag.pos.sub(initialPosBeforeUpdate);
+                    drags[1].pos = initialDragState.pc.add(deltaMove);
+                } else if (currentDrag === drags[1]) {
+                    updateCurvatureSliderFromPC();
+                    
+                    if (canvas.width > 0 && canvas.height > 0) {
+                        drags[1].initialRatioX = drags[1].pos.x / canvas.width;
+                        drags[1].initialRatioY = drags[1].pos.y / canvas.height;
+                    }
+                }
+                
+                canvas.style.cursor = "grabbing";
+            } else {
+                canvas.style.cursor = "default";
+            }
+        }
+        
+        function handleInteractionEnd(event) { 
+            if (!isInteracting && !currentDrag) return;
+            
+            if (event.type === "touchend") event.preventDefault();
+            
+            const wasDragging = !!currentDrag;
+            isInteracting = false;
+            
+            if (currentDrag) {
+                currentDrag.endDrag();
+                
+                if (currentDrag === drags[0] || currentDrag === drags[2]) {
+                    if (canvas.width > 0 && canvas.height > 0) {
+                        drags[1].initialRatioX = drags[1].pos.x / canvas.width;
+                        drags[1].initialRatioY = drags[1].pos.y / canvas.height;
+                    }
+                } else if (currentDrag === drags[1]) {
+                    updateCurvatureSliderFromPC();
+                }
+                
+                currentDrag = null;
+            }
+            
+            initialDragState = {p1: null, pc: null, p2: null};
+            
+            const pos = getEventPosition(event);
+            let hovering = false;
+            
+            for (let i = drags.length - 1; i >= 0; i--) {
+                if (drags[i].hitTest(pos)) {
+                    hovering = true;
+                    break;
+                }
+            }
+            
+            canvas.style.cursor = hovering ? "grab" : "default";
+        }
 
         // --- Start the application ---
         window.onload = init;
